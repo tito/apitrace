@@ -46,7 +46,10 @@ extern glws::Context *context;
 extern int window_width;
 extern int window_height;
 
+extern GLint fb;
+
 extern unsigned frame;
+extern unsigned unsaved_draws;
 extern long long startTime;
 extern bool wait;
 
@@ -58,6 +61,8 @@ extern unsigned dump_state;
 
 void
 checkGlError(void);
+
+void snapshot(unsigned call_no);
 
 void state_dump(std::ostream &os);
 

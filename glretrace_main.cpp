@@ -44,7 +44,10 @@ glws::Context *context = NULL;
 
 int window_width = 256, window_height = 256;
 
+GLint fb = 0;
+
 unsigned frame = 0;
+unsigned unsaved_draws = 0;
 long long startTime = 0;
 bool wait = false;
 
@@ -99,7 +102,7 @@ checkGlError(void) {
 }
 
 
-static void snapshot(Image::Image &image) {
+static void color_snapshot(Image::Image &image) {
     GLint drawbuffer = double_buffer ? GL_BACK : GL_FRONT;
     GLint readbuffer = double_buffer ? GL_BACK : GL_FRONT;
     glGetIntegerv(GL_DRAW_BUFFER, &drawbuffer);
@@ -111,39 +114,47 @@ static void snapshot(Image::Image &image) {
 }
 
 
-static void frame_complete(unsigned call_no) {
-    ++frame;
-    
-    if (snapshot_prefix || compare_prefix) {
-        Image::Image *ref = NULL;
-        if (compare_prefix) {
-            char filename[PATH_MAX];
-            snprintf(filename, sizeof filename, "%s%010u.png", compare_prefix, call_no);
-            ref = Image::readPNG(filename);
-            if (!ref) {
-                return;
-            }
-            if (retrace::verbosity >= 0)
-                std::cout << "Read " << filename << "\n";
-        }
-        
-        Image::Image src(window_width, window_height, true);
-        snapshot(src);
+void snapshot(unsigned call_no) {
+    Image::Image *ref = NULL;
 
-        if (snapshot_prefix) {
-            char filename[PATH_MAX];
-            snprintf(filename, sizeof filename, "%s%010u.png", snapshot_prefix, call_no);
-            if (src.writePNG(filename) && retrace::verbosity >= 0) {
-                std::cout << "Wrote " << filename << "\n";
-            }
-        }
+    if (!unsaved_draws || (!compare_prefix && !snapshot_prefix))
+        return;
 
-        if (ref) {
-            std::cout << "Snapshot " << call_no << " average precision of " << src.compare(*ref) << " bits\n";
-            delete ref;
+    if (compare_prefix) {
+        char filename[PATH_MAX];
+        snprintf(filename, sizeof filename, "%s%010u.png", compare_prefix, call_no);
+        ref = Image::readPNG(filename);
+        if (!ref) {
+            return;
+        }
+        if (retrace::verbosity >= 0)
+            std::cout << "Read " << filename << "\n";
+    }
+
+    Image::Image src(window_width, window_height, true);
+    color_snapshot(src);
+
+    if (snapshot_prefix) {
+        char filename[PATH_MAX];
+        snprintf(filename, sizeof filename, "%s%010u.png", snapshot_prefix, call_no);
+        if (src.writePNG(filename) && retrace::verbosity >= 0) {
+            std::cout << "Wrote " << filename << "\n";
         }
     }
 
+    if (ref) {
+        std::cout << "Snapshot " << call_no << " average precision of " << src.compare(*ref) << " bits\n";
+        delete ref;
+    }
+
+    unsaved_draws = 0;
+}
+
+
+static void frame_complete(unsigned call_no) {
+    ++frame;
+
+    snapshot(call_no);
 }
 
 
@@ -182,6 +193,8 @@ static void display(void) {
             glFlush();
             if (!double_buffer) {
                 frame_complete(call->no);
+            } else if (fb != 0) {
+                snapshot(call->no);
             }
         }
         

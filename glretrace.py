@@ -67,6 +67,12 @@ class GlRetracer(Retracer):
         #"glMatrixIndexPointerARB",
     ))
 
+    bind_framebuffer_function_names = set([
+        "glBindFramebuffer",
+        "glBindFramebufferARB",
+        "glBindFramebufferEXT",
+    ])
+
     draw_array_function_names = set([
         "glDrawArrays",
         "glDrawArraysEXT",
@@ -123,6 +129,11 @@ class GlRetracer(Retracer):
 
         Retracer.retrace_function_body(self, function)
 
+    misc_draw_function_names = set([
+        "glClear",
+        "glEnd",
+    ])
+
     def call_function(self, function):
         if function.name == "glViewport":
             print '    bool reshape_window = false;'
@@ -139,6 +150,19 @@ class GlRetracer(Retracer):
             print '        glretrace::drawable->resize(glretrace::window_width, glretrace::window_height);'
             print '        reshape_window = false;'
             print '    }'
+
+        if function.name in self.bind_framebuffer_function_names:
+            print '    GLint __new_fb = 0;'
+            print '    glGetIntegerv(GL_FRAMEBUFFER_BINDING_EXT, &__new_fb);'
+            print '    if (__new_fb != glretrace::fb) {'
+            print '        glretrace::snapshot(call.no);'
+            print '        glretrace::fb = __new_fb;'
+            print '    }'
+
+        if (function.name in self.draw_array_function_names or
+            function.name in self.draw_elements_function_names or
+            function.name in self.misc_draw_function_names):
+            print '    glretrace::unsaved_draws++;'
 
         if function.name == "glEnd":
             print '    glretrace::insideGlBeginEnd = false;'
