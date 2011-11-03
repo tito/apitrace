@@ -85,7 +85,7 @@ class ValueExtractor(stdapi.Visitor):
     def visit_pointer(self, pointer, lvalue, rvalue):
         print '    const trace::Array *__a%s = dynamic_cast<const trace::Array *>(&%s);' % (pointer.tag, rvalue)
         print '    if (__a%s) {' % (pointer.tag)
-        print '        %s = new %s;' % (lvalue, pointer.type)
+        print '        _allocator(%s);' % (lvalue,)
         try:
             self.visit(pointer.type, '%s[0]' % (lvalue,), '*__a%s->values[0]' % (pointer.tag,))
         finally:
@@ -194,6 +194,8 @@ class Retracer:
             print '    (void)call;'
             return
 
+        print '    scoped_allocator _allocator;'
+        print '    (void)_allocator;'
         success = True
         for arg in function.args:
             arg_type = ConstRemover().visit(arg.type)
@@ -275,6 +277,7 @@ class Retracer:
 
         print '#include "trace_parser.hpp"'
         print '#include "retrace.hpp"'
+        print '#include "scoped_allocator.hpp"'
         print
 
         types = api.all_types()
