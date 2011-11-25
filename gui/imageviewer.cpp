@@ -1,5 +1,6 @@
 #include "imageviewer.h"
 
+#include <QDebug>
 #include <QDesktopWidget>
 #include <QPainter>
 #include <QPixmap>
@@ -9,6 +10,13 @@ ImageViewer::ImageViewer(QWidget *parent)
     : QDialog(parent)
 {
     setupUi(this);
+
+    connect(lowerSpinBox, SIGNAL(valueChanged(double)),
+            SLOT(slotUpdate()));
+    connect(upperSpinBox, SIGNAL(valueChanged(double)),
+            SLOT(slotUpdate()));
+    connect(flipCheckBox, SIGNAL(stateChanged(int)),
+            SLOT(slotUpdate()));
 
     QPixmap px(32, 32);
     QPainter p(&px);
@@ -27,8 +35,52 @@ ImageViewer::ImageViewer(QWidget *parent)
 void ImageViewer::setImage(const QImage &image)
 {
     m_image = image;
-    QPixmap px = QPixmap::fromImage(image);
+    m_temp = m_image;
+    QPixmap px = QPixmap::fromImage(m_temp);
     imageLabel->setPixmap(px);
+    updateGeometry();
+}
+
+void ImageViewer::slotUpdate()
+{
+    qDebug() << "updated!!\n";
+    
+    m_temp = m_image.mirrored(false, flipCheckBox->isChecked());
+
+    double lowerValue = lowerSpinBox->value();
+    double upperValue = upperSpinBox->value();
+
+    if (lowerValue != 0.0 || upperValue != 1.0) {
+        int offset = - lowerValue * 255;
+        int scale = 256 / (upperValue - lowerValue);
+
+        m_temp = m_temp.convertToFormat(QImage::Format_ARGB32);
+    
+        qDebug() << "offset = " << offset << "\n";
+        qDebug() << "scale = " << scale << "\n";
+
+        int width = m_temp.width();
+        int height = m_temp.height();
+
+        for (int y = 0; y < height; ++y) {
+            QRgb *scanline = (QRgb *)m_temp.scanLine(y);
+            for (int x = 0; x < width; ++x) {
+                QRgb pixel = scanline[x];
+                int r = qRed(pixel);
+                int g = qGreen(pixel);
+                int b = qBlue(pixel);
+                r = ((r + offset) * scale) >> 8;
+                g = ((g + offset) * scale) >> 8;
+                b = ((b + offset) * scale) >> 8;
+                int a = 255;
+                scanline[x] = qRgba(r, g, b, a);
+            }
+        }
+    }
+
+    QPixmap px = QPixmap::fromImage(m_temp);
+    imageLabel->setPixmap(px);
+
     updateGeometry();
 }
 
