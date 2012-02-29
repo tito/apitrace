@@ -83,6 +83,8 @@ public:
 
     bool hasErrors() const;
 
+    void bindSnapsToFrames(QList<QImage> *snaps);
+
 public slots:
     void setFileName(const QString &name);
     void save();

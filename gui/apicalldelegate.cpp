@@ -27,17 +27,29 @@ void ApiCallDelegate::paint(QPainter *painter,
     Q_ASSERT(index.column() == 0);
 
     if (event) {
-        QPoint offset;
+        QPoint offset = QPoint(0, 0);
         QStaticText text = event->staticText();
         //text.setTextWidth(option.rect.width());
         //QStyledItemDelegate::paint(painter, option, index);
         QStyle *style = QApplication::style();
         style->drawControl(QStyle::CE_ItemViewItem, &option, painter, 0);
+
+        // draw thumbnail of frame
+        if (event->type() == ApiTraceEvent::Frame) {
+            ApiTraceFrame *frame = static_cast<ApiTraceFrame *>(event);
+            QImage snap = frame->snap();
+            if (!snap.isNull()) {
+                QImage thumbnail = snap.scaled(16, 16, Qt::KeepAspectRatio, Qt::FastTransformation);
+                painter->drawImage(option.rect.topLeft() + offset, thumbnail);
+                offset += QPoint(option.rect.height() + 16, 0);
+            }
+        }
+
         if (event->hasState()) {
             QPixmap px = m_stateEmblem.pixmap(option.rect.height(),
                                               option.rect.height());
-            painter->drawPixmap(option.rect.topLeft(), px);
-            offset = QPoint(option.rect.height() + 5, 0);
+            painter->drawPixmap(option.rect.topLeft() + offset, px);
+            offset += QPoint(option.rect.height() + 5, 0);
         }
         if (event->type() == ApiTraceEvent::Call) {
             ApiTraceCall *call = static_cast<ApiTraceCall*>(event);

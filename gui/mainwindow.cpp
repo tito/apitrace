@@ -851,6 +851,8 @@ void MainWindow::replayStateFound(ApiTraceState *state)
 void MainWindow::replaySnapsFound(QList<QImage> *snaps)
 {
     m_snaps = snaps;
+
+    m_trace->bindSnapsToFrames(snaps);
 }
 
 void MainWindow::slotGoTo()

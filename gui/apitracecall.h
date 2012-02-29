@@ -335,6 +335,10 @@ public:
 
     void setLastCallIndex(unsigned index);
     unsigned lastCallIndex() const;
+
+    QImage snap() const;
+    void setSnap(QImage snap);
+
 private:
     ApiTrace *m_parentTrace;
     quint64 m_binaryDataSize;
@@ -342,6 +346,7 @@ private:
     bool m_loaded;
     unsigned m_callsToLoad;
     unsigned m_lastCallIndex;
+    QImage m_snap;
 };
 Q_DECLARE_METATYPE(ApiTraceFrame*);
 

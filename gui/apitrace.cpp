@@ -496,4 +496,14 @@ bool ApiTrace::isFrameLoading(ApiTraceFrame *frame) const
     return m_loadingFrames.contains(frame);
 }
 
+void ApiTrace::bindSnapsToFrames(QList<QImage> *snaps)
+{
+    QList<ApiTraceFrame *> frames = this->m_frames;
+
+    for (int idx = 0; idx < frames.count(); ++idx) {
+        ApiTraceFrame *frame = frames.at(idx);
+        frame->setSnap(snaps->at(idx));
+    }
+}
+
 #include "apitrace.moc"
