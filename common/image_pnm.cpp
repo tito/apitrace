@@ -108,5 +108,55 @@ Image::writePNM(std::ostream &os, const char *comment) const {
     }
 }
 
+const char *
+readPNMHeader(const char *buffer, size_t buffer_size, unsigned *channels, unsigned *width, unsigned *height)
+{
+    *channels = 0;
+    *width = 0;
+    *height = 0;
+
+    const char *curr_buffer = buffer;
+    const char *next_buffer;
+
+    // parse number of channels
+    int scanned_channels = sscanf(curr_buffer, "P%d\n", channels);
+    if (scanned_channels != 1) { // validate scanning of channels
+        // invalid channel line
+        return buffer;
+    }
+    // convert channel token to number of channels
+    *channels = (*channels == 5) ? 1 : 3;
+
+    // advance past channel line
+    next_buffer = (const char *) memchr((const void *) curr_buffer, '\n', buffer_size) + 1;
+    buffer_size -= next_buffer - curr_buffer;
+    curr_buffer = next_buffer;
+
+    // skip over optional comment
+    if (*curr_buffer == '#') {
+        // advance past comment line
+        next_buffer = (const char *) memchr((const void *) curr_buffer, '\n', buffer_size) + 1;
+        buffer_size -= next_buffer - curr_buffer;
+        curr_buffer = next_buffer;
+    }
+
+    // parse dimensions of image
+    int scanned_dims = sscanf(curr_buffer, "%d %d\n", width, height);
+    if (scanned_dims != 2) { // validate scanning of dimensions
+        // invalid dimension line
+        return buffer;
+    }
+
+    // advance past dimension line
+    next_buffer = (const char *) memchr((const void *) curr_buffer, '\n', buffer_size) + 1;
+    buffer_size -= next_buffer - curr_buffer;
+    curr_buffer = next_buffer;
+
+    // skip over "255\n" at end of header
+    next_buffer = (const char *) memchr((const void *) curr_buffer, '\n', buffer_size) + 1;
+
+    // return start of image data
+    return next_buffer;
+}
 
 } /* namespace image */

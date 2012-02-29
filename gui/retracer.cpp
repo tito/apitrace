@@ -2,8 +2,12 @@
 
 #include "apitracecall.h"
 
+#include "image.hpp"
+
 #include <QDebug>
 #include <QVariant>
+#include <QList>
+#include <QImage>
 
 #include <qjson/parser.h>
 
@@ -83,6 +87,16 @@ void Retracer::setCaptureState(bool enable)
     m_captureState = enable;
 }
 
+bool Retracer::captureSnaps() const
+{
+    return m_captureSnaps;
+}
+
+void Retracer::setCaptureSnaps(bool enable)
+{
+    m_captureSnaps = enable;
+}
+
 
 void Retracer::run()
 {
@@ -94,6 +108,7 @@ void Retracer::run()
     retrace->setBenchmarking(m_benchmarking);
     retrace->setDoubleBuffered(m_doubleBuffered);
     retrace->setCaptureState(m_captureState);
+    retrace->setCaptureSnaps(m_captureSnaps);
     retrace->setCaptureAtCallNumber(m_captureCall);
 
     connect(retrace, SIGNAL(finished(const QString&)),
@@ -106,6 +121,8 @@ void Retracer::run()
             this, SIGNAL(error(const QString&)));
     connect(retrace, SIGNAL(foundState(ApiTraceState*)),
             this, SIGNAL(foundState(ApiTraceState*)));
+    connect(retrace, SIGNAL(foundSnaps(QList<QImage>*)),
+            this, SIGNAL(foundSnaps(QList<QImage>*)));
     connect(retrace, SIGNAL(retraceErrors(const QList<ApiTraceError>&)),
             this, SIGNAL(retraceErrors(const QList<ApiTraceError>&)));
 
@@ -142,9 +159,15 @@ void RetraceProcess::start()
         arguments << QLatin1String("-sb");
     }
 
-    if (m_captureState) {
-        arguments << QLatin1String("-D");
-        arguments << QString::number(m_captureCall);
+    if (m_captureState || m_captureSnaps) {
+        if (m_captureState) {
+            arguments << QLatin1String("-D");
+            arguments << QString::number(m_captureCall);
+        }
+        if (m_captureSnaps) {
+            arguments << QLatin1String("-s"); // emit snapshots
+            arguments << QLatin1String("-"); // emit to stdout
+        }
     } else {
         if (m_benchmarking) {
             arguments << QLatin1String("-b");
@@ -160,8 +183,8 @@ void RetraceProcess::start()
 void RetraceProcess::replayFinished(int exitCode, QProcess::ExitStatus exitStatus)
 {
     QByteArray output = m_process->readAllStandardOutput();
-    QString msg;
     QString errStr = m_process->readAllStandardError();
+    QString msg;
 
 #if 0
     qDebug()<<"Process finished = ";
@@ -174,12 +197,58 @@ void RetraceProcess::replayFinished(int exitCode, QProcess::ExitStatus exitStatu
     } else if (exitCode != 0) {
         msg = QLatin1String("Process exited with non zero exit code");
     } else {
-        if (m_captureState) {
-            bool ok = false;
-            QVariantMap parsedJson = m_jsonParser->parse(output, &ok).toMap();
-            ApiTraceState *state = new ApiTraceState(parsedJson);
-            emit foundState(state);
-            msg = tr("State fetched.");
+        if (m_captureState || m_captureSnaps) {
+            if (m_captureState) {
+                bool ok = false;
+                QVariantMap parsedJson = m_jsonParser->parse(output, &ok).toMap();
+                ApiTraceState *state = new ApiTraceState(parsedJson);
+                emit foundState(state);
+                msg = tr("State fetched.");
+            }
+            if (m_captureSnaps) {
+                QList<QImage> *snaps = new QList<QImage>();
+
+                const char *curr_buffer = output.data();
+                const char *next_buffer;
+                int buffer_size = output.count();
+
+                while (buffer_size > 0) {
+                    unsigned channels = 0;
+                    unsigned width = 0;
+                    unsigned height = 0;
+
+                    next_buffer = image::readPNMHeader(curr_buffer, buffer_size, &channels, &width, &height);
+
+                    // if invalid PNM header was encountered, ...
+                    if (next_buffer == curr_buffer) {
+                        qDebug() << "error: invalid snapshot stream encountered\n";
+                        break;
+                    }
+
+                    //qDebug() << "channels: " << channels << ", width: " << width << ", height: " << height << "\n";
+
+                    buffer_size -= next_buffer - curr_buffer;
+                    curr_buffer = next_buffer;
+
+                    QImage snap = QImage(width, height, channels == 1 ? QImage::Format_Mono : QImage::Format_RGB888);
+
+                    const char *src = curr_buffer;
+                    int row_bytes = channels * width;
+                    for (int y = 0; y < height; ++y) {
+                        unsigned char *dst = snap.scanLine(y);
+                        memcpy((void *) dst, (const void *) src, row_bytes);
+                        src += row_bytes;
+                    }
+                    snaps->append(snap);
+
+                    int image_size = row_bytes * height;
+                    curr_buffer += image_size;
+                    buffer_size -= image_size;
+                }
+
+                emit foundSnaps(snaps);
+                msg = tr("Snaps fetched");
+            }
         } else {
             msg = QString::fromUtf8(output);
         }
@@ -293,6 +362,16 @@ bool RetraceProcess::captureState() const
 void RetraceProcess::setCaptureState(bool enable)
 {
     m_captureState = enable;
+}
+
+bool RetraceProcess::captureSnaps() const
+{
+    return m_captureSnaps;
+}
+
+void RetraceProcess::setCaptureSnaps(bool enable)
+{
+    m_captureSnaps = enable;
 }
 
 void RetraceProcess::terminate()

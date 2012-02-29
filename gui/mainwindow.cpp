@@ -172,7 +172,7 @@ void MainWindow::replayStart()
             dlgUi.doubleBufferingCB->isChecked());
         m_retracer->setBenchmarking(
             !dlgUi.errorCheckCB->isChecked());
-        replayTrace(false);
+        replayTrace(false, true);
     }
 }
 
@@ -202,6 +202,9 @@ void MainWindow::newTraceFile(const QString &fileName)
         setWindowTitle(
             tr("QApiTrace - %1").arg(info.fileName()));
     }
+
+    // force initial capture of snapshots
+    replayTrace(false, true);
 }
 
 void MainWindow::replayFinished(const QString &output)
@@ -264,7 +267,7 @@ void MainWindow::finishedLoadingTrace()
     }
 }
 
-void MainWindow::replayTrace(bool dumpState)
+void MainWindow::replayTrace(bool dumpState, bool dumpSnaps)
 {
     if (m_trace->fileName().isEmpty()) {
         return;
@@ -273,6 +276,7 @@ void MainWindow::replayTrace(bool dumpState)
     m_retracer->setFileName(m_trace->fileName());
     m_retracer->setAPI(m_api);
     m_retracer->setCaptureState(dumpState);
+    m_retracer->setCaptureSnaps(dumpSnaps);
     if (m_retracer->captureState() && m_selectedEvent) {
         int index = 0;
         if (m_selectedEvent->type() == ApiTraceEvent::Call) {
@@ -296,9 +300,17 @@ void MainWindow::replayTrace(bool dumpState)
 
     m_ui.actionStop->setEnabled(true);
     m_progressBar->show();
-    if (dumpState) {
-        statusBar()->showMessage(
-            tr("Looking up the state..."));
+    if (dumpState || dumpSnaps) {
+        if (dumpState && dumpSnaps) {
+            statusBar()->showMessage(
+                tr("Looking up the state and capturing thumbnails..."));
+        } else if (dumpState) {
+            statusBar()->showMessage(
+                tr("Looking up the state..."));
+        } else if (dumpSnaps) {
+            statusBar()->showMessage(
+                tr("Capturing thumbnails..."));
+        }
     } else {
         statusBar()->showMessage(
             tr("Replaying the trace file..."));
@@ -322,7 +334,7 @@ void MainWindow::lookupState()
         return;
     }
     m_stateEvent = m_selectedEvent;
-    replayTrace(true);
+    replayTrace(true, false);
 }
 
 MainWindow::~MainWindow()
@@ -706,6 +718,8 @@ void MainWindow::initObjects()
     m_searchWidget->hide();
 
     m_traceProcess = new TraceProcess(this);
+
+    m_snaps = NULL;
 }
 
 void MainWindow::initConnections()
@@ -737,6 +751,8 @@ void MainWindow::initConnections()
             this, SLOT(replayError(const QString&)));
     connect(m_retracer, SIGNAL(foundState(ApiTraceState*)),
             this, SLOT(replayStateFound(ApiTraceState*)));
+    connect(m_retracer, SIGNAL(foundSnaps(QList<QImage>*)),
+            this, SLOT(replaySnapsFound(QList<QImage>*)));
     connect(m_retracer, SIGNAL(retraceErrors(const QList<ApiTraceError>&)),
             this, SLOT(slotRetraceErrors(const QList<ApiTraceError>&)));
 
@@ -830,6 +846,11 @@ void MainWindow::replayStateFound(ApiTraceState *state)
         m_ui.stateDock->hide();
     }
     m_nonDefaultsLookupEvent = 0;
+}
+
+void MainWindow::replaySnapsFound(QList<QImage> *snaps)
+{
+    m_snaps = snaps;
 }
 
 void MainWindow::slotGoTo()
